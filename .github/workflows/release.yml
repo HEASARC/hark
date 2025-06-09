@@ -84,7 +84,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub Actions
           # GH_REPO: ${{ github.repository }} # gh CLI usually infers this correctly
-        with:
-          # Parameters for gh release upload are passed directly in the run command
         run: |
           gh release upload ${{ github.event.release.tag_name }} ./${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }} --clobber
