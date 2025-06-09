@@ -85,7 +85,7 @@ jobs:
         run: |
           Compress-Archive -Path "${{ steps.asset_prep.outputs.SOURCE_BINARY_PATH }}" -DestinationPath "${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }}"
 
-      - name: Archive binary (Unix-like: Linux/macOS)
+      - name: Archive binary (Unix-like Linux/macOS)
         if: matrix.archive_format == 'tar.gz' && runner.os != 'Windows'
         shell: bash
         run: |
