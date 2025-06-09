@@ -13,7 +13,7 @@ jobs:
         include:
           - target_os: linux
             os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             arch: amd64
             bin_name: hark # Binary name inside the archive
             archive_format: tar.gz
