@@ -1,5 +1,6 @@
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use std::env;
 use std::error::Error;
 use std::io::Write; 
 use rusqlite::{Connection};
@@ -24,6 +25,17 @@ pub const SUPPORTED_TABLES: &[&str] = &[
 const HEA_DB_GZ_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/hea.db.gz"));
 
 fn main() -> Result<(), Box<dyn Error>> {
+    // Check for command-line arguments like -v or --version
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "-v" | "--version" => {
+                println!("hark version {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            _ => {} // Handle other potential command-line args or ignore
+        }
+    }
     // 1. Decompress the embedded gzipped database
     let mut decoder = GzDecoder::new(HEA_DB_GZ_BYTES);
     let mut decompressed_db_bytes = Vec::new();
