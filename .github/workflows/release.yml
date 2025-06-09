@@ -29,12 +29,6 @@ jobs:
             arch: arm64
             bin_name: hark
             archive_format: tar.gz
-          - target_os: windows
-            os: windows-latest
-            target: x86_64-pc-windows-msvc
-            arch: amd64
-            bin_name: hark.exe # Binary name with .exe for Windows
-            archive_format: zip
 
     steps:
       - name: Checkout code
@@ -49,7 +43,9 @@ jobs:
           profile: minimal # Use minimal profile for faster toolchain setup
 
       - name: Build binary
-        run: cargo build --verbose --release --target ${{ matrix.target }}
+        run: |
+          cargo build --verbose --release --target ${{ matrix.target }}
+          ls -lh target/${{ matrix.target }}/release/${{ matrix.bin_name }}
         env:
           CARGO_TERM_COLOR: always # Ensure colored output in logs
 
@@ -79,24 +75,16 @@ jobs:
           echo "ARCHIVE_INTERNAL_BIN_NAME=${{ matrix.bin_name }}" >> $GITHUB_OUTPUT
           echo "ASSET_CONTENT_TYPE=${ASSET_CONTENT_TYPE}" >> $GITHUB_OUTPUT
 
-      - name: Archive binary (Windows)
-        if: matrix.archive_format == 'zip' && runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Compress-Archive -Path "${{ steps.asset_prep.outputs.SOURCE_BINARY_PATH }}" -DestinationPath "${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }}"
-
       - name: Archive binary (Unix-like Linux/macOS)
-        if: matrix.archive_format == 'tar.gz' && runner.os != 'Windows'
         shell: bash
         run: |
           tar czvf "${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }}" -C "$(dirname "${{ steps.asset_prep.outputs.SOURCE_BINARY_PATH }}")" "${{ steps.asset_prep.outputs.ARCHIVE_INTERNAL_BIN_NAME }}"
 
-      - name: Upload Release Asset
-        uses: actions/upload-release-asset@v1
+      - name: Upload Release Asset with gh CLI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Provided by GitHub Actions
+          # GH_REPO: ${{ github.repository }} # gh CLI usually infers this correctly
         with:
-          upload_url: ${{ github.event.release.upload_url }} # URL for uploading to this specific release
-          asset_path: ./${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }} # Path to the asset created in the workspace
-          asset_name: ${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }} # Name of the asset in the release
-          asset_content_type: ${{ steps.asset_prep.outputs.ASSET_CONTENT_TYPE }}
+          # Parameters for gh release upload are passed directly in the run command
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} ./${{ steps.asset_prep.outputs.FINAL_ASSET_NAME }} --clobber
