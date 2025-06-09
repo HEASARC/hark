@@ -36,6 +36,11 @@ jobs:
         with:
           lfs: true
 
+      - name: Install musl-tools (Linux only)
+        if: matrix.target_os == 'linux' && contains(matrix.target, 'musl')
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y musl-tools
+
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
