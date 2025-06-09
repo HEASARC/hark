@@ -186,15 +186,12 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
     // Fetch the comma-separated list of default column names for display
     let default_cols_str_opt = match get_default_columns(&conn, table) {
         Ok(s) if !s.is_empty() => {
-            println!("Will display additional default columns: {}", s.cyan());
             Some(s)
         }
         Ok(_) => { // Empty string means no default columns with order
-            println!("{}", "No specific ordered default columns found for additional display.".dimmed());
             None
         }
-        Err(e) => {
-            eprintln!("Warning: Could not fetch default column list for table '{}': {}. No additional columns will be shown.", table.yellow(), e);
+        Err(_) => {
             None
         }
     };
@@ -244,6 +241,7 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
     //println!("Executing query: {}", query.dimmed().italic());
     let mut stmt = conn.prepare(&query)?;
     let mut rows = stmt.query([unit_x, unit_y, unit_z, radius_c])?;
+    let mut last_prod = "".to_string(); // use for printing help at the end
     
     let mut found_count = 0;
     while let Some(row) = rows.next()? {
@@ -288,7 +286,8 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
                 }
             }
             let product_link = get_product_link(table, row);
-            output_line.push_str(&format!(" {} {}{}", sep, "s3://nasa-heasarc/".green(), product_link.green()));
+            last_prod = format!("{}{}", "s3://nasa-heasarc/".green(), product_link.green());
+            output_line.push_str(&format!(" {} {}", sep, last_prod));
         }
         println!("{}", output_line); // Print the complete line
     }
@@ -298,6 +297,14 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
     } else {
         println!("{}", "---------------------------".dimmed());
         println!("Query returned {} entries", found_count.to_string().green().bold());
+        println!("{}", "---------------------------".dimmed());
+        println!("To retreave a prodcut, use aws command line interface ({}).\nFor example:\n{} {} {}{} {}",
+            "https://aws.amazon.com/cli/".dimmed(),
+            "aws s3 --no-sign cp ".green(),
+            last_prod.bold(),
+            "./".green(), last_prod.split("/").last().unwrap_or("").green(),
+            "--recursive.".to_string().green()
+        );
     }
     println!();
     Ok(())
