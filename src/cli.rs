@@ -58,14 +58,19 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
             if args.is_empty() || args.len() < 2 {
                 println!();
                 println!(
-                    "{}: {} {} [{}]",
-                    "Usage".blue().underline(), "query-table".bold(), "table_name position".cyan(), "radius".yellow().dimmed());
+                    "{}: {} {} [{}] [{}]",
+                    "Usage".blue().underline(), "query-table".bold(), "table_name position".cyan(), 
+                    "radius".yellow().dimmed(), "products".yellow().dimmed());
                 println!();
                 println!("{:>12}: The name of the table to be queried. Use {} to see a list of supported tables",
                         "table_name".cyan(), "list-tables".bold());
                 println!("{:>12}: Search RA and DEC as: ra,dec", "position".cyan());
-                println!("{:>12}: Search radius. If not given, the default for the table is used.",
+                println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
                         "radius".yellow().dimmed());
+                println!("{:>12}: Print product links only. If given, do not print all columns, only the product links.
+                    e.g. {}.
+                    Pass 0 for radius to use the default",
+                        "products".yellow().dimmed(), "query-table xrismmastr 16,-72 0 products".cyan());
                 println!();
             } else {
                 // Pass the first argument as the table_name
