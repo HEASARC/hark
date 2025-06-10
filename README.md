@@ -21,10 +21,12 @@ hark> ?
 hark: HEASARC archive offline explorer.
 
 Commands
-    list-tables: List supported tables
-   list-columns: List columns of a table
-    query-table: Query a specific table
-     -----------
-           help: Show help message (also: h, ?)
-           exit: Exit (also: quit, q)
+     list-tables: List supported tables
+    list-columns: List columns of a table
+     query-table: Query a specific table
+    aws-download: Download data from AWS
+      -----------
+            help: Show help message (also: h, ?).
+                  Use help command-name for command help
+            exit: Exit (also: quit, q)
 ```
