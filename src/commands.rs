@@ -1,10 +1,16 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rusqlite::{params, Connection, Row};
 use std::collections::HashSet;
 use colored::*;
 use chrono::{NaiveDate, Datelike};
 use std::error::Error;
+use std::path::{Path, PathBuf};
 
+use aws_config;
+use aws_sdk_s3::{Client as S3Client};
+use tokio::fs::{self, File};
+use tokio::io::AsyncWriteExt;
+ 
 use crate::SUPPORTED_TABLES;
 
 const INTERNAL_COLS_ARRAY: [&str; 3] = ["__x_ra_dec", "__y_ra_dec", "__z_ra_dec"];
@@ -18,6 +24,7 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{:>16}: List supported tables", "list-tables".cyan());
         println!("{:>16}: List columns of a table", "list-columns".cyan());
         println!("{:>16}: Query a specific table", "query-table".cyan());
+        println!("{:>16}: Download data from AWS", "aws-download".cyan());
         println!("{:>17}", "-----------".cyan().dimmed());
         println!("{:>16}: Show help message (also: h, ?).\n{:>18}Use {} for command help",
                         "help".cyan(), "", "help command-name".cyan());
@@ -46,6 +53,21 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("  - List all columns for the SWIFT master catalog:\n    {}\n",
                 "list-columns swiftmastr all".cyan());
     
+    } else if args[0] == "aws-download" {
+
+        println!();
+        println!(
+            "{}: {} {}",
+            "Usage".yellow().underline(), "aws-download".bold(), "s3_uri".cyan());
+        println!();
+        println!("{:>12}: The s3 URI return in query-table.",
+                "s3_uri".cyan());
+        println!();
+
+        println!("{}", "Examples:".yellow().underline());
+        println!("  - Download SWIFT obsid 000037258040:\n     {}\n",
+                "aws-download s3://nasa-heasarc/swift/data/obs/2015_12/00037258040".cyan());
+
     } else if args[0] == "query-table" {
 
         println!();
@@ -82,7 +104,16 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
                 "query-table numaster 182.6,39.4 ra,dec,name products".cyan());
         println!("  - Query xmmmaster around position 182.6,39.4 for default columns and add product links:\n     {}\n", 
                 "query-table xmmmaster 182.6,39.4 products".cyan());
-
+    
+    } else if args[0] == "aws-download" {
+        println!();
+        println!(
+            "{}: {} {}",
+            "Usage".yellow().underline(), "aws-download".bold(), "s3_uri".cyan(),
+        );
+        println!();
+        println!("{:>12}: The uri found in query-table, of the form: s3://nasa-heasarc/...",
+                "s3_uri".cyan());
     } else {
         println!("No Help for command '{}'", args[0]);
     }
@@ -182,6 +213,149 @@ pub fn list_columns(table_name: &str, all: &bool, conn: &Connection) -> Result<(
     Ok(())
 }
 
+
+pub async fn aws_download(s3_uri: &str, _conn: &Connection) -> Result<()> {
+    println!("\nAttempting to download from: {}", s3_uri.cyan());
+
+    if !s3_uri.starts_with("s3://") {
+        eprintln!("{}", "Error: S3 URI must start with s3://".red());
+        return Ok(());
+    }
+
+    let s3_path = s3_uri.strip_prefix("s3://").unwrap(); // Safe due to check above
+    let (bucket, prefix) = match s3_path.split_once('/') {
+        Some((b, p)) => (b.to_string(), p.to_string()),
+        None => {
+            // This means URI was like "s3://bucketname" with no key part
+            (s3_path.to_string(), "".to_string())
+        }
+    };
+
+    if bucket.is_empty() {
+        eprintln!("{}", "Error: Bucket name cannot be empty.".red());
+        return Ok(());
+    }
+    if bucket != "nasa-heasarc" {
+        eprintln!("{}", "Error: Bucket name is not nasa-heasarc.".red());
+        return Ok(());
+    }
+
+    // Determine local target directory: named after the last component of the S3 prefix,
+    // or the bucket name if the prefix is empty.
+    let local_target_dir_name = if prefix.is_empty() {
+        bucket.clone()
+    } else {
+        Path::new(&prefix)
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .filter(|name| !name.is_empty() && name != "/") // Ensure it's a valid dir name
+            .unwrap_or_else(|| prefix.replace("/", "_")) // Fallback for complex prefixes
+    };
+    
+    let local_base_path = PathBuf::from(&local_target_dir_name);
+
+    if !local_base_path.exists() {
+        println!("Creating local directory: {}", local_base_path.display());
+        fs::create_dir_all(&local_base_path).await
+            .with_context(|| format!("Failed to create directory {}", local_base_path.display()))?;
+    } else if !local_base_path.is_dir() {
+        eprintln!("Error: A file exists at the target path '{}', cannot create directory.", local_base_path.display());
+        return Ok(());
+    }
+
+    println!("Target S3 Bucket: {}", bucket.green());
+    println!("Target S3 Prefix: {}", if prefix.is_empty() { " (root)".dimmed().to_string() } else { prefix.green().to_string() });
+    println!("Local download directory: {}", local_base_path.display());
+
+
+    let config = aws_config::defaults(aws_config::BehaviorVersion::latest())
+        .no_credentials()
+        .region("us-east-1")
+        .load()
+        .await;
+    let client = S3Client::new(&config);
+
+    let mut objects_stream = client
+        .list_objects_v2()
+        .bucket(bucket.clone())
+        .prefix(prefix.clone()) // list_objects_v2 handles empty prefix correctly
+        .into_paginator()
+        .send();
+
+    let mut downloaded_count = 0;
+    let mut total_size_bytes: u64 = 0;
+
+    while let Some(result) = objects_stream.next().await {
+        match result {
+            Ok(output) => {
+                for object in output.contents() {
+                    let object_key = object.key().unwrap_or_default();
+                    if object_key.ends_with('/') { // Skip S3 "directory" markers
+                        continue;
+                    }
+
+                    let object_key_path = Path::new(object_key);
+                    //println!("++ {:?}", object_key_path);
+                    let final_local_path: PathBuf;
+
+                    if object_key == prefix { // Handles downloading a single file specified by its full key
+                        let filename = object_key_path.file_name().ok_or_else(|| anyhow::anyhow!("Object key {} has no filename", object_key))?;
+                        final_local_path = local_base_path.join(filename);
+                    } else {
+                        let s3_prefix_to_strip = if prefix.is_empty() || prefix.ends_with('/') {
+                            prefix.clone()
+                        } else {
+                             // If prefix is "foo" and object_key is "foo/bar.txt", strip "foo/"
+                            if object_key.starts_with(&format!("{}/", prefix)) {
+                                format!("{}/", prefix)
+                            } else {
+                                prefix.clone() // Should only match if object_key == prefix (handled above) or not at all
+                            }
+                        };
+                        let path_suffix = object_key.strip_prefix(&s3_prefix_to_strip)
+                            .ok_or_else(|| anyhow::anyhow!("Logic error: Failed to strip prefix '{}' from object key '{}'", s3_prefix_to_strip, object_key))?;
+                        final_local_path = local_base_path.join(path_suffix);
+                    }
+
+                    if let Some(parent_dir) = final_local_path.parent() {
+                        if !parent_dir.exists() {
+                            fs::create_dir_all(parent_dir).await.with_context(|| format!("Failed to create parent directory {}", parent_dir.display()))?;
+                        }
+                    }
+                    
+                    println!("  Downloading {} ...", object_key.yellow());
+                    match client.get_object().bucket(bucket.clone()).key(object_key.to_string()).send().await {
+                        Ok(get_obj_output) => {
+                            let mut file = File::create(&final_local_path).await.with_context(|| format!("Failed to create file {}", final_local_path.display()))?;
+                            let mut byte_stream = get_obj_output.body;
+                            let mut file_size_bytes: u64 = 0;
+                            while let Some(bytes) = byte_stream.try_next().await.with_context(|| format!("Failed to read bytes from S3 stream for {}", object_key))? {
+                                file.write_all(&bytes).await.with_context(|| format!("Failed to write to file {}", final_local_path.display()))?;
+                                file_size_bytes += bytes.len() as u64;
+                            }
+                            total_size_bytes += file_size_bytes;
+                            downloaded_count += 1;
+                            println!("    {} Downloaded ({} MB)", "Success:".green(), file_size_bytes / 1024 / 1024);
+                        }
+                        Err(e) => eprintln!("    {} Failed to download {}: {}", "Error:".red(), object_key.yellow(), e),
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("{} Failed to list objects from S3: {}", "Error:".red(), e);
+                break; 
+            }
+        }
+    }
+
+    if downloaded_count > 0 {
+        println!("\n{} Downloaded {} files, total size {} MB to {}.", "Finished:".bold().green(),
+                    downloaded_count, total_size_bytes / 1024 / 1024, local_base_path.display());
+    } else {
+        println!("\n{} No files found to download for S3 prefix '{}' in bucket '{}', or an error occurred during listing.", "Info:".yellow(), prefix, bucket);
+    }
+    Ok(())
+}
 
 pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier: &Option<String>, add_prods: &bool, conn: &Connection) -> Result<()> {
 

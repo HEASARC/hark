@@ -8,6 +8,7 @@ use tempfile::NamedTempFile;
 use colored::*;
 use flate2::read::GzDecoder;
 use std::io::Read;
+use tokio;
 
 
 mod cli;
@@ -24,7 +25,8 @@ pub const SUPPORTED_TABLES: &[&str] = &[
 /// Assumes 'hea.db.gz' is in the project root (alongside Cargo.toml).
 const HEA_DB_GZ_BYTES: &[u8] = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/hea.db.gz"));
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     // Check for command-line arguments like -v or --version
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
@@ -77,7 +79,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 rl.add_history_entry(trimmed_line)?;
 
                 // Parse and dispatch the command
-                match cli::parse_and_dispatch_command(trimmed_line, &conn) {
+                match cli::parse_and_dispatch_command(trimmed_line, &conn).await {
                     Ok(cli::CommandOutcome::Exit) => {
                         println!("Exiting hark.");
                         break;

@@ -10,7 +10,7 @@ pub enum CommandOutcome {
 }
 
 /// Parses the input line and dispatches the command.
-pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<CommandOutcome> {
+pub async fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<CommandOutcome> {
     let parts: Vec<&str> = line.split_whitespace().collect();
     if parts.is_empty() {
         return Ok(CommandOutcome::Continue);
@@ -41,6 +41,14 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
                 }
 
                 commands::list_columns(&args[0], &all, conn)?;
+            }
+            Ok(CommandOutcome::Continue)
+        }
+        "aws-download" => {
+            if args.is_empty() {
+                commands::handle_help(&["aws-download".to_string()], conn)?;
+            } else {
+                commands::aws_download(&args[0], conn).await?;
             }
             Ok(CommandOutcome::Continue)
         }
