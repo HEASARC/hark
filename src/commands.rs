@@ -122,7 +122,7 @@ pub fn list_columns(table_name: &str, all: &bool, conn: &Connection) -> Result<(
 }
 
 
-pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier: &Option<String>, prod_only: &bool, conn: &Connection) -> Result<()> {
+pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier: &Option<String>, add_prods: &bool, conn: &Connection) -> Result<()> {
 
     // Check if the provided table_name is in the list of supported tables
     if !SUPPORTED_TABLES.contains(&table) {
@@ -237,7 +237,7 @@ pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier:
     // Construct and print the header
     let mut header_line = format!("{:<5} | {:<10}",
                                     "#".bold(), "Offset (')".bold());
-    if ! *prod_only {
+    if ! *add_prods {
         for col_name in &display_columns_vec {
             //if col_name != "ra" && col_name != "dec" && col_name != "id" { // Assuming 'id' is special and ra/dec handled
                 header_line.push_str(&format!(" | {:<12}", col_name.bold()));
@@ -279,29 +279,28 @@ pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier:
                     found_count.to_string().cyan(),
                     (row_offset.acos().to_degrees() * 60.0).to_string().yellow()
         );
-        if !*prod_only {
-            for col_name in &display_columns_vec {
-                // Try to get the column value as Option<String>
-                match row.get::<_, Option<String>>(col_name.as_str()) {
-                    Ok(Some(val)) => {
-                        output_line.push_str(&format!(" {} {:<12}", sep, val));
-                    }
-                    Ok(None) => {
-                        output_line.push_str(&format!(" {} {:<12}", sep, "NULL".dimmed()));
-                    }
-                    Err(_) => {
-                        // This column might not be in SELECT (if select_clause_for_sql is out of sync with display_columns_vec)
-                        // or it's not convertible to Option<String>
-                        output_line.push_str(&format!(" {} {}: {}", sep, col_name.red(), "<N/A>".dimmed()));
-                    }
+        for col_name in &display_columns_vec {
+            // Try to get the column value as Option<String>
+            match row.get::<_, Option<String>>(col_name.as_str()) {
+                Ok(Some(val)) => {
+                    output_line.push_str(&format!(" {} {:<12}", sep, val));
+                }
+                Ok(None) => {
+                    output_line.push_str(&format!(" {} {:<12}", sep, "NULL".dimmed()));
+                }
+                Err(_) => {
+                    // This column might not be in SELECT (if select_clause_for_sql is out of sync with display_columns_vec)
+                    // or it's not convertible to Option<String>
+                    output_line.push_str(&format!(" {} {}: {}", sep, col_name.red(), "<N/A>".dimmed()));
                 }
             }
         }
-
-        // Always add product link at the end
-        let product_link = get_product_link(table, row);
-        last_prod = format!("{}{}", "s3://nasa-heasarc/".green(), product_link.green());
-        output_line.push_str(&format!(" {} {}", sep, last_prod));
+        if *add_prods {
+            // Always add product link at the end
+            let product_link = get_product_link(table, row);
+            last_prod = format!("{}{}", "s3://nasa-heasarc/".green(), product_link.green());
+            output_line.push_str(&format!(" {} {}", sep, last_prod));
+        }
         
         println!("{}", output_line); // Print the complete line
     }

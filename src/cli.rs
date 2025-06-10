@@ -71,12 +71,12 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
                 println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
                         "radius".yellow().dimmed());
                 println!("{:>12}: Columns to be printed. Use */all for all columns. If not given or \"\", 
-                        the default is used. See list-columns for details",
-                        "radius".yellow().dimmed());
-                println!("{:>12}: Print product links only. If given, do not print all columns, only the product links.
+                the default is used. Use list-columns to see available columns",
+                        "columns".yellow().dimmed());
+                println!("{:>12}: Print product links. If given, add product links to the table.
                     e.g. {}.
                     Pass 0 for radius to use the default",
-                        "products".yellow().dimmed(), "query-table xrismmastr 16,-72 0 products".cyan());
+                        "products".yellow().dimmed(), "query-table xrismmastr 16,-72 products".cyan());
                 println!();
             } else {
                 // Pass the first argument as the table_name
