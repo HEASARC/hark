@@ -1,11 +1,13 @@
 use anyhow::Result;
 use rusqlite::{params, Connection, Row};
+use std::collections::HashSet;
 use colored::*;
 use chrono::{NaiveDate, Datelike};
 use std::error::Error;
 
 use crate::SUPPORTED_TABLES;
 
+const INTERNAL_COLS_ARRAY: [&str; 3] = ["__x_ra_dec", "__y_ra_dec", "__z_ra_dec"];
 
 pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
     if args.is_empty() {
@@ -13,12 +15,12 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{}: HEASARC archive offline explorer.", "hark".bold().yellow());
         println!();
         println!("{}", "Commands".cyan().underline());
-        println!("{:>15}: List supported tables", "list-tables".cyan());
-        println!("{:>15}: List columns of a table", "list-columns".cyan());
-        println!("{:>15}: Query a specific table", "query-table".cyan());
-        println!("{:>16}", "-----------".cyan().dimmed());
-        println!("{:>15}: Show help message (also: h, ?)", "help".cyan());
-        println!("{:>15}: Exit (also: quit, q)", "exit".cyan());
+        println!("{:>16}: List supported tables", "list-tables".cyan());
+        println!("{:>16}: List columns of a table", "list-columns".cyan());
+        println!("{:>16}: Query a specific table", "query-table".cyan());
+        println!("{:>17}", "-----------".cyan().dimmed());
+        println!("{:>16}: Show help message (also: h, ?)", "help".cyan());
+        println!("{:>16}: Exit (also: quit, q)", "exit".cyan());
         println!();
     } else {
         println!("Help for command '{}': (not yet implemented)", args[0]);
@@ -120,7 +122,8 @@ pub fn list_columns(table_name: &str, all: &bool, conn: &Connection) -> Result<(
 }
 
 
-pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, conn: &Connection) -> Result<()> {
+pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier: &Option<String>, prod_only: &bool, conn: &Connection) -> Result<()> {
+
     // Check if the provided table_name is in the list of supported tables
     if !SUPPORTED_TABLES.contains(&table) {
         eprintln!("Error: Table '{}' is not a supported table.", table.red().bold());
@@ -183,44 +186,65 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
         search_radius.to_string().yellow()
     );
 
-    // Fetch the comma-separated list of default column names for display
-    let default_cols_str_opt = match get_default_columns(&conn, table) {
-        Ok(s) if !s.is_empty() => {
-            Some(s)
-        }
-        Ok(_) => { // Empty string means no default columns with order
-            None
-        }
-        Err(_) => {
-            None
-        }
-    };
+    let display_columns_vec: Vec<String>;
+    let select_clause_for_sql: String;
 
-    let default_col_names_vec: Vec<String> = default_cols_str_opt
-        .as_deref()
-        .map_or_else(Vec::new, |s| s.split(',').map(String::from).collect());
-
-    // Prepare the list of additional columns to display in the header,
-    // excluding those already covered by the fixed header (id, ra, dec).
-    let additional_display_col_names: Vec<String> = default_col_names_vec
-        .iter()
-        .filter(|&col_name| col_name != "id" && col_name != "ra" && col_name != "dec")
-        .cloned()
-        .collect();
+    match columns_specifier {
+        Some(spec) => {
+            if spec == "*" || spec.to_lowercase() == "all" {
+                select_clause_for_sql = "*".to_string();
+                display_columns_vec = get_all_table_columns(conn, table)?
+                    .into_iter()
+                    //.filter(|c| !INTERNAL_COLS_ARRAY.contains(&c.as_str()))
+                    .collect();
+            } else {
+                // User provided a comma-separated list
+                display_columns_vec = spec.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                
+                let mut sql_select_set: HashSet<String> = display_columns_vec.iter().cloned().collect();
+                // Ensure we have columns needed to get the products
+                sql_select_set.insert("obsid".to_string());
+                if table == "nicermastr" {
+                    sql_select_set.insert("time".to_string());
+                } else if table == "swiftmastr" {
+                    sql_select_set.insert("start_time".to_string());
+                }
+                select_clause_for_sql = sql_select_set.into_iter().collect::<Vec<String>>().join(", ");
+            }
+        }
+        None => { // Default columns
+            match get_default_columns(conn, table) { // get_default_columns returns comma-separated string
+                Ok(default_cols_str) if !default_cols_str.is_empty() => {
+                    display_columns_vec = default_cols_str.split(',').map(String::from).collect();
+                    let sql_select_set: HashSet<String> = display_columns_vec.iter().cloned().collect();
+                    select_clause_for_sql = sql_select_set.into_iter().collect::<Vec<String>>().join(", ");
+                }
+                _ => { // Error or no default columns defined, fallback to all
+                    println!("{}", "(No default display columns defined or error fetching, showing all. Specify columns or use 'list-columns' to see available.)".italic());
+                    select_clause_for_sql = "*".to_string();
+                    display_columns_vec = get_all_table_columns(conn, table)?
+                        .into_iter()
+                        //.filter(|c| !INTERNAL_COLS_ARRAY.contains(&c.as_str()))
+                        .collect();
+                }
+            }
+        }
+    }
 
     // Construct and print the header
-    let mut header_line = format!("{:<5} | {:<8} | {:<8} | {:<8}",
-                                    "#".bold(), "ra (deg)".bold(), "dec (deg)".bold(), "Offset (')".bold());
-    let mut separator_line = format!("{:-<5}-+-{:-<8}-+-{:-<8}-+-{:-<8}",
-                                        "".dimmed(), "".dimmed(), "".dimmed(), "".dimmed());
+    let mut header_line = format!("{:<5} | {:<10}",
+                                    "#".bold(), "Offset (')".bold());
     if ! *prod_only {
-        for col_name in &additional_display_col_names {
-            header_line.push_str(&format!(" | {:<20}", col_name.bold())); // Assuming 20 char width for additional cols
-            separator_line.push_str(&format!("-+-{:-<20}", "".dimmed()));
+        for col_name in &display_columns_vec {
+            //if col_name != "ra" && col_name != "dec" && col_name != "id" { // Assuming 'id' is special and ra/dec handled
+                header_line.push_str(&format!(" | {:<12}", col_name.bold()));
+            //}
         }
     }
     header_line.push_str(&format!(" | {:<20}", "link".bold()));
-    separator_line.push_str(&format!("-+-{:-<20}", "".dimmed()));
 
     println!("\n{}", header_line);
     //println!("{}", separator_line);
@@ -236,7 +260,7 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
     let query = format!("
         SELECT {}, (__x_ra_dec * ?1 + __y_ra_dec * ?2 + __z_ra_dec * ?3) as _offset FROM {}
         WHERE _offset >= ?4
-        ", default_cols_str_opt.as_deref().unwrap_or("*"), table
+        ", select_clause_for_sql, table
     );
     //println!("Executing query: {}", query.dimmed().italic());
     let mut stmt = conn.prepare(&query)?;
@@ -245,50 +269,40 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
     
     let mut found_count = 0;
     while let Some(row) = rows.next()? {
-        // Attempt to get ra and dec directly as f64 if they are numeric in DB
-        // If they are stored as TEXT, then getting as String and parsing is correct.
-        // Assuming they might be TEXT for now, based on current code.
-        let row_ra_str_res = row.get::<_, String>("ra");
-        let row_dec_str_res = row.get::<_, String>("dec");
-        let row_offset = row.get::<_, f64>("_offset");
+        let row_offset = row.get::<_, f64>("_offset")?; // Use ? to propagate error
         let sep = "|".blue();
 
         found_count += 1;
                             
         // Start building the output line with fixed columns
-        let mut output_line = format!("{:<5} | {:<8.6} | {:<8.6} | {:<8.6}",
+        let mut output_line = format!("{:<5} | {:<10.6}",
                     found_count.to_string().cyan(),
-                    row_ra_str_res.unwrap().to_string().green(), // Use parsed f64
-                    row_dec_str_res.unwrap().to_string().green(), // Use parsed f64
-                    (row_offset.unwrap().acos().to_degrees() * 60.0).to_string().yellow()
+                    (row_offset.acos().to_degrees() * 60.0).to_string().yellow()
         );
-        if !default_col_names_vec.is_empty() {
-            if ! *prod_only {
-                for col_name in &default_col_names_vec {
-                    // Skip if it's one of the primary columns already printed, to avoid redundancy
-                    if col_name == "id" || col_name == "ra" || col_name == "dec" {
-                        continue;
+        if !*prod_only {
+            for col_name in &display_columns_vec {
+                // Try to get the column value as Option<String>
+                match row.get::<_, Option<String>>(col_name.as_str()) {
+                    Ok(Some(val)) => {
+                        output_line.push_str(&format!(" {} {:<12}", sep, val));
                     }
-                    // reset obsid and time values
-                    match row.get::<_, Option<String>>(col_name.as_str()) {
-                        Ok(Some(val)) => {
-                            output_line.push_str(&format!(" {} {}", sep, val));
-                        }
-                        Ok(None) => {
-                            output_line.push_str(&format!(" {} {}", sep, "NULL".dimmed()));
-                        }
-                        Err(_) => {
-                            // This column might not be in SELECT * (if get_default_columns is out of sync)
-                            // or it's not convertible to Option<String>
-                            output_line.push_str(&format!(" {} {}: {}", sep, col_name.red(), "<N/A or Error>".dimmed()));
-                        }
+                    Ok(None) => {
+                        output_line.push_str(&format!(" {} {:<12}", sep, "NULL".dimmed()));
+                    }
+                    Err(_) => {
+                        // This column might not be in SELECT (if select_clause_for_sql is out of sync with display_columns_vec)
+                        // or it's not convertible to Option<String>
+                        output_line.push_str(&format!(" {} {}: {}", sep, col_name.red(), "<N/A>".dimmed()));
                     }
                 }
             }
-            let product_link = get_product_link(table, row);
-            last_prod = format!("{}{}", "s3://nasa-heasarc/".green(), product_link.green());
-            output_line.push_str(&format!(" {} {}", sep, last_prod));
         }
+
+        // Always add product link at the end
+        let product_link = get_product_link(table, row);
+        last_prod = format!("{}{}", "s3://nasa-heasarc/".green(), product_link.green());
+        output_line.push_str(&format!(" {} {}", sep, last_prod));
+        
         println!("{}", output_line); // Print the complete line
     }
 
@@ -298,72 +312,98 @@ pub fn query_table(table: &str, position: &str, radius: &f64, prod_only: &bool, 
         println!("{}", "---------------------------".dimmed());
         println!("Query returned {} entries", found_count.to_string().green().bold());
         println!("{}", "---------------------------".dimmed());
-        println!("To retreave a prodcut, use aws command line interface ({}).\nFor example:\n{} {} {}{} {}",
-            "https://aws.amazon.com/cli/".dimmed(),
-            "aws s3 --no-sign cp ".green(),
-            last_prod.bold(),
-            "./".green(), last_prod.split("/").last().unwrap_or("").green(),
-            "--recursive.".to_string().green()
-        );
+        if !last_prod.contains("No Product Link") && !last_prod.is_empty() { // Check if a valid product link was generated
+            println!("To retrieve a product, use aws command line interface ({}).\nFor example:\n{} {} {}{} {}",
+                "https://aws.amazon.com/cli/".dimmed(),
+                "aws s3 --no-sign-request cp ".green(), // Corrected --no-sign to --no-sign-request
+                last_prod.bold(),
+                "./".green(), last_prod.split('/').last().unwrap_or("").green(),
+                "--recursive".to_string().green() // Corrected --recursive. to --recursive
+            );
+        }
     }
     println!();
     Ok(())
 }
 
+// Helper function to get all column names for a table
+fn get_all_table_columns(conn: &Connection, table_name: &str) -> Result<Vec<String>, rusqlite::Error> {
+    let mut stmt_info = conn.prepare(&format!("PRAGMA table_info('{}')", table_name))?;
+    let mut rows_info = stmt_info.query([])?;
+    let mut column_names = Vec::new();
+    while let Some(row_info) = rows_info.next()? {
+        let col_name: String = row_info.get(1)?; // Column name is at index 1
+        if !INTERNAL_COLS_ARRAY.contains(&col_name.as_str()) { // Exclude internal columns
+             column_names.push(col_name);
+        }
+    }
+    Ok(column_names)
+}
+
 // work out product links
 fn get_product_link(table_name: &str, row: &Row) -> String {
-
-    let obsid = match row.get::<_, Option<String>>("obsid") {
+    let obsid_res = row.get::<_, Option<String>>("obsid");
+    let obsid = match obsid_res {
         Ok(Some(val)) => val,
-        _ => {"No Obsid".to_string()}
+        _ => return "No Product Link (obsid missing)".to_string(), // Early return if obsid is not found or error
     };
 
     match table_name {
         "nicermastr" => {
-            let mjd: f64 = match row.get::<_, Option<String>>("time") {
+            let time_str_res = row.get::<_, Option<String>>("time");
+            let mjd_str = match time_str_res {
                 Ok(Some(val)) => val,
-                _ => {"0.0".to_string()}
-            }.parse().unwrap_or(0.0);
-            let tzero = NaiveDate::from_ymd_opt(2014, 01, 01).unwrap();
-            let mjdref =  56658;
+                _ => return "No Product Link (time missing)".to_string(),
+            };
+            let mjd: f64 = mjd_str.parse().unwrap_or(0.0);
+            if mjd == 0.0 { return "No Product Link (invalid time)".to_string(); }
+
+            let tzero = NaiveDate::from_ymd_opt(2014, 1, 1).unwrap();
+            let mjdref = 56658; // MJD for 2014-01-01
             let days_since_ce = mjd.floor() as i32 - mjdref + tzero.num_days_from_ce();
-            let date =     NaiveDate::from_num_days_from_ce_opt(days_since_ce).unwrap();
+            let date = NaiveDate::from_num_days_from_ce_opt(days_since_ce).unwrap_or(tzero); // Fallback to tzero on error
             let year_month = format!("{:04}_{:02}", date.year(), date.month());
-            format!("nicer/data/obs/{year_month}/{obsid}/")
+            format!("nicer/data/obs/{year_month}/{obsid}")
         },
         "xmmmaster" => format!("xmm/data/rev0/{obsid}"),
         "swiftmastr" => {
-                        let mjd: f64 = match row.get::<_, Option<String>>("start_time") {
+            let start_time_str_res = row.get::<_, Option<String>>("start_time");
+            let mjd_str = match start_time_str_res {
                 Ok(Some(val)) => val,
-                _ => {"0.0".to_string()}
-            }.parse().unwrap_or(0.0);
-            let tzero = NaiveDate::from_ymd_opt(2001, 01, 01).unwrap();
-            let mjdref =  51910;
+                _ => return "No Product Link (start_time missing)".to_string(),
+            };
+            let mjd: f64 = mjd_str.parse().unwrap_or(0.0);
+            if mjd == 0.0 { return "No Product Link (invalid start_time)".to_string(); }
+
+            let tzero = NaiveDate::from_ymd_opt(2001, 1, 1).unwrap();
+            let mjdref = 51910; // MJD for 2001-01-01
             let days_since_ce = mjd.floor() as i32 - mjdref + tzero.num_days_from_ce();
-            let date = NaiveDate::from_num_days_from_ce_opt(days_since_ce).unwrap();
+            let date = NaiveDate::from_num_days_from_ce_opt(days_since_ce).unwrap_or(tzero);
             let year_month = format!("{:04}_{:02}", date.year(), date.month());
             format!("swift/data/obs/{year_month}/{obsid}")
         },
         "chanmaster" => {
-            //let substr = obsid.chars().last().map(|c| c.to_string()).unwrap_or_default();
-            let substr = obsid.chars().last().map(|c| c.to_string()).unwrap_or_default();
+            let substr = obsid.chars().last().map_or("?".to_string(), |c| c.to_string()); // Handle empty obsid
             format!("chandra/data/byobsid/{substr}/{obsid}")
         },
         "numaster" => {
+            if obsid.len() < 3 { return "No Product Link (obsid too short)".to_string(); }
             let substr1: String = obsid.chars().skip(1).take(2).collect();
             let substr2: String = obsid.chars().take(1).collect();
             format!("nustar/data/obs/{substr1}/{substr2}/{obsid}")
         },
-        "ixmaster" => {
+        "ixmaster" => { // Assuming ixpemaster was a typo for ixmaster
+            if obsid.is_empty() { return "No Product Link (obsid empty)".to_string(); }
             let substr: String = obsid.chars().take(2).collect();
             format!("ixpe/data/obs/{substr}/{obsid}")
         },
         "xrismmastr" => {
+            if obsid.is_empty() { return "No Product Link (obsid empty)".to_string(); }
             let substr: String = obsid.chars().take(1).collect();
             format!("xrism/data/obs/{substr}/{obsid}")
         },
         _ => {
-            "".to_string()
+            "No Product Link (unknown table)".to_string()
         }
     }
 }

@@ -58,14 +58,20 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
             if args.is_empty() || args.len() < 2 {
                 println!();
                 println!(
-                    "{}: {} {} [{}] [{}]",
+                    "{}: {} {} [{}] [{}] [{}]",
                     "Usage".blue().underline(), "query-table".bold(), "table_name position".cyan(), 
-                    "radius".yellow().dimmed(), "products".yellow().dimmed());
+                    "radius".yellow().dimmed(),
+                    "columns".yellow().dimmed(),
+                    "products".yellow().dimmed(),
+                );
                 println!();
                 println!("{:>12}: The name of the table to be queried. Use {} to see a list of supported tables",
                         "table_name".cyan(), "list-tables".bold());
                 println!("{:>12}: Search RA and DEC as: ra,dec", "position".cyan());
                 println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
+                        "radius".yellow().dimmed());
+                println!("{:>12}: Columns to be printed. Use */all for all columns. If not given or \"\", 
+                        the default is used. See list-columns for details",
                         "radius".yellow().dimmed());
                 println!("{:>12}: Print product links only. If given, do not print all columns, only the product links.
                     e.g. {}.
@@ -74,17 +80,35 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
                 println!();
             } else {
                 // Pass the first argument as the table_name
-                let position = args[1].to_string();
-                let mut radius = 0.0;
-                if args.len() > 2 {
-                    radius = args[2].parse::<f64>().unwrap_or(0.0);
-                }
-                let mut prod_only = false;
-                if args.len() > 3 && args[3] == "products" {
-                    prod_only = true;
+                let table_name = &args[0];
+                let position_str = args[1].to_string();
+                let mut radius  = 0.0;
+                let mut columns_arg: Option<String> = None;
+                let mut products_only_flag = false;
+
+                let mut current_arg_idx = 2; // Index for optional arguments
+
+                // Try to parse radius
+                if current_arg_idx < args.len() {
+                    if let Ok(r_val) = args[current_arg_idx].parse::<f64>() {
+                        radius = r_val;
+                        current_arg_idx += 1;
+                    }
+                    // If not a float, assume it's not radius, and current_arg_idx remains for columns/products
                 }
 
-                commands::query_table(&args[0], &position, &radius, &prod_only, conn)?;
+                // Try to parse columns specifier
+                if current_arg_idx < args.len() && args[current_arg_idx].to_lowercase() != "products" {
+                    columns_arg = Some(args[current_arg_idx].clone());
+                    current_arg_idx += 1;
+                }
+
+                // Try to parse "products" flag
+                if current_arg_idx < args.len() && args[current_arg_idx].to_lowercase() == "products" {
+                    products_only_flag = true;
+                }
+
+                commands::query_table(table_name, &position_str, &radius, &columns_arg, &products_only_flag, conn)?;
             }
             Ok(CommandOutcome::Continue)
         }
