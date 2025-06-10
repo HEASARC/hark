@@ -19,11 +19,72 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{:>16}: List columns of a table", "list-columns".cyan());
         println!("{:>16}: Query a specific table", "query-table".cyan());
         println!("{:>17}", "-----------".cyan().dimmed());
+        println!("{:>16}: Show example commands", "examples".cyan());
         println!("{:>16}: Show help message (also: h, ?)", "help".cyan());
         println!("{:>16}: Exit (also: quit, q)", "exit".cyan());
         println!();
+    } else if args[0] == "list-tables" {
+        println!("{}", "list-tables:".green().bold());
+        println!("{:>17}", "-------------------".cyan().dimmed());
+        println!("Call {} to see a list of the available table.", "list-tables".cyan());
+    } else if args[0] == "list-columns" {
+
+        println!();
+        println!(
+            "{}: {} {} [{}]",
+            "Usage".yellow().underline(), "list-columns".bold(), "table_name".cyan(), "all".yellow().dimmed());
+        println!();
+        println!("{:>12}: The name of the table for which to list columns. Use {} to see a list of supported tables",
+                "table_name".cyan(), "list-tables".bold());
+        println!("{:>12}: List all columns. The default is to list a subset of useful columns.",
+                "all".yellow().dimmed());
+        println!();
+
+        println!("{}", "Examples:".yellow().underline());
+        println!("  - List the default columns for the NICER master catalog:\n     {}\n",
+                "list-columns nicermastr".cyan());
+        println!("  - List all columns for the SWIFT master catalog:\n    {}\n",
+                "list-columns swiftmastr all".cyan());
+    
+    } else if args[0] == "query-table" {
+
+        println!();
+        println!(
+            "{}: {} {} [{}] [{}] [{}]",
+            "Usage".yellow().underline(), "query-table".bold(), "table_name position".cyan(), 
+            "radius".yellow().dimmed(),
+            "columns".yellow().dimmed(),
+            "products".yellow().dimmed(),
+        );
+        println!();
+        println!("{:>12}: The name of the table to be queried. Use {} to see a list of supported tables",
+                "table_name".cyan(), "list-tables".bold());
+        println!("{:>12}: Search RA and DEC as: ra,dec", "position".cyan());
+        println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
+                "radius".yellow().dimmed());
+        println!("{:>12}: Columns to be printed. Use */all for all columns. If not given or \"\", 
+        the default is used. Use list-columns to see available columns",
+                "columns".yellow().dimmed());
+        println!("{:>12}: Print product links. If given, add product links to the table.
+            e.g. {}.
+            Pass 0 for radius to use the default",
+                "products".yellow().dimmed(), "query-table xrismmastr 16,-72 products".cyan());
+        println!();
+        
+        println!("{}", "Examples:".yellow().underline());
+        println!("  - Query nicermastr around position 182.6,39.4 using the default radius:\n    {}\n", 
+                "query-table nicermastr 182.6,39.4".cyan());
+        println!("  - Query numaster around position 182.6,39.4 and radius 40 arcmin:\n    {}\n", 
+                "query-table numaster 182.6,39.4 40".cyan());
+        println!("  - Query numaster around position 182.6,39.4 for specific columns:\n    {}\n", 
+                "query-table numaster 182.6,39.4 ra,dec,name".cyan());
+        println!("  - Query numaster around position 182.6,39.4 for specific columns and add product links:\n    {}\n", 
+                "query-table numaster 182.6,39.4 ra,dec,name products".cyan());
+        println!("  - Query xmmmaster around position 182.6,39.4 for default columns and add product links:\n     {}\n", 
+                "query-table xmmmaster 182.6,39.4 products".cyan());
+
     } else {
-        println!("Help for command '{}': (not yet implemented)", args[0]);
+        println!("No Help for command '{}'", args[0]);
     }
     Ok(())
 }
@@ -237,14 +298,14 @@ pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier:
     // Construct and print the header
     let mut header_line = format!("{:<5} | {:<10}",
                                     "#".bold(), "Offset (')".bold());
-    if ! *add_prods {
-        for col_name in &display_columns_vec {
-            //if col_name != "ra" && col_name != "dec" && col_name != "id" { // Assuming 'id' is special and ra/dec handled
-                header_line.push_str(&format!(" | {:<12}", col_name.bold()));
-            //}
-        }
+    for col_name in &display_columns_vec {
+        //if col_name != "ra" && col_name != "dec" && col_name != "id" { // Assuming 'id' is special and ra/dec handled
+            header_line.push_str(&format!(" | {:<12}", col_name.bold()));
+        //}
     }
-    header_line.push_str(&format!(" | {:<20}", "link".bold()));
+    if *add_prods {
+        header_line.push_str(&format!(" | {:<20}", "link".bold()));
+    }
 
     println!("\n{}", header_line);
     //println!("{}", separator_line);

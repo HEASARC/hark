@@ -1,7 +1,6 @@
 
 use anyhow::{Result};
 use rusqlite::Connection;
-use colored::*;
 use crate::commands;
 
 /// Outcome of a command execution
@@ -33,16 +32,7 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
         }
         "list-columns" => {
             if args.is_empty() {
-                println!();
-                println!(
-                    "{}: {} {} [{}]",
-                    "Usage".blue().underline(), "list-columns".bold(), "table_name".cyan(), "all".yellow().dimmed());
-                println!();
-                println!("{:>12}: The name of the table for which to list columns. Use {} to see a list of supported tables",
-                        "table_name".cyan(), "list-tables".bold());
-                println!("{:>12}: List all columns. The default is to list a subset of useful columns.",
-                        "all".yellow().dimmed());
-                println!();
+                commands::handle_help(&["list-columns".to_string()], conn)?;
             } else {
                 // Pass the first argument as the table_name
                 let mut all = false;
@@ -56,28 +46,7 @@ pub fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result<Comma
         }
         "query-table" => {
             if args.is_empty() || args.len() < 2 {
-                println!();
-                println!(
-                    "{}: {} {} [{}] [{}] [{}]",
-                    "Usage".blue().underline(), "query-table".bold(), "table_name position".cyan(), 
-                    "radius".yellow().dimmed(),
-                    "columns".yellow().dimmed(),
-                    "products".yellow().dimmed(),
-                );
-                println!();
-                println!("{:>12}: The name of the table to be queried. Use {} to see a list of supported tables",
-                        "table_name".cyan(), "list-tables".bold());
-                println!("{:>12}: Search RA and DEC as: ra,dec", "position".cyan());
-                println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
-                        "radius".yellow().dimmed());
-                println!("{:>12}: Columns to be printed. Use */all for all columns. If not given or \"\", 
-                the default is used. Use list-columns to see available columns",
-                        "columns".yellow().dimmed());
-                println!("{:>12}: Print product links. If given, add product links to the table.
-                    e.g. {}.
-                    Pass 0 for radius to use the default",
-                        "products".yellow().dimmed(), "query-table xrismmastr 16,-72 products".cyan());
-                println!();
+                commands::handle_help(&["query-table".to_string()], conn)?;
             } else {
                 // Pass the first argument as the table_name
                 let table_name = &args[0];
