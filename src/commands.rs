@@ -19,8 +19,8 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{:>16}: List columns of a table", "list-columns".cyan());
         println!("{:>16}: Query a specific table", "query-table".cyan());
         println!("{:>17}", "-----------".cyan().dimmed());
-        println!("{:>16}: Show example commands", "examples".cyan());
-        println!("{:>16}: Show help message (also: h, ?)", "help".cyan());
+        println!("{:>16}: Show help message (also: h, ?).\n{:>18}Use {} for command help",
+                        "help".cyan(), "", "help command-name".cyan());
         println!("{:>16}: Exit (also: quit, q)", "exit".cyan());
         println!();
     } else if args[0] == "list-tables" {
@@ -59,9 +59,9 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!();
         println!("{:>12}: The name of the table to be queried. Use {} to see a list of supported tables",
                 "table_name".cyan(), "list-tables".bold());
-        println!("{:>12}: Search RA and DEC as: ra,dec", "position".cyan());
-        println!("{:>12}: Search radius. If not given or 0, the default for the table is used.",
-                "radius".yellow().dimmed());
+        println!("{:>12}: Search RA and DEC as: ra,dec in {}", "position".cyan(), "degrees".yellow());
+        println!("{:>12}: Search radius in {}. If not given or 0, the default for the table is used.",
+                "radius".yellow().dimmed(), "arcmin".yellow());
         println!("{:>12}: Columns to be printed. Use */all for all columns. If not given or \"\", 
         the default is used. Use list-columns to see available columns",
                 "columns".yellow().dimmed());
