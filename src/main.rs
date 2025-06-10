@@ -17,7 +17,7 @@ mod commands;
 /// A static list of officially supported table names.
 pub const SUPPORTED_TABLES: &[&str] = &[
     "nicermastr", "xmmmaster", "swiftmastr", "chanmaster",
-    "numaster", "ixmaster", "xrismmastr"
+    "numaster", "ixmaster"
 ];
 
 

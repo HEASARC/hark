@@ -631,11 +631,6 @@ fn get_product_link(table_name: &str, row: &Row) -> String {
             let substr: String = obsid.chars().take(2).collect();
             format!("ixpe/data/obs/{substr}/{obsid}")
         },
-        "xrismmastr" => {
-            if obsid.is_empty() { return "No Product Link (obsid empty)".to_string(); }
-            let substr: String = obsid.chars().take(1).collect();
-            format!("xrism/data/obs/{substr}/{obsid}")
-        },
         _ => {
             "No Product Link (unknown table)".to_string()
         }
