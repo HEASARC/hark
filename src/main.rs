@@ -1,3 +1,5 @@
+// Copyright 2025, University of Maryland, All Rights Reserved
+
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::env;

@@ -1,3 +1,5 @@
+// Copyright 2025, University of Maryland, All Rights Reserved
+
 use anyhow::{Context, Result};
 use rusqlite::{params, Connection, Row};
 use std::collections::HashSet;
@@ -19,6 +21,10 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
     if args.is_empty() {
         println!();
         println!("{}: HEASARC archive offline explorer.", "hark".bold().yellow());
+        println!();
+        println!("{}", "Copyright (c) 2025 University of Maryland. All rights reserved.".dimmed());
+        println!("{}", "See LICENSE file at https://github.com/HEASARC/hark".dimmed());
+        println!("{}", "The material is based upon work supported by NASA under award number 80GSFC24M0006".dimmed());
         println!();
         println!("{}", "Commands".cyan().underline());
         println!("{:>16}: List supported tables", "list-tables".cyan());

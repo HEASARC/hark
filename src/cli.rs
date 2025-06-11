@@ -1,3 +1,4 @@
+// Copyright 2025, University of Maryland, All Rights Reserved
 
 use anyhow::{Result};
 use rusqlite::Connection;
