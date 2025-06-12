@@ -11,7 +11,7 @@ The tool also provide functions that allow you to download data directly from th
 curl -sSL https://raw.githubusercontent.com/HEASARC/hark/gh/install.sh | sh
 ```
 
-This will install the `hark` binary file in `~/.local/bin/`. If you want to install it
+This will install the `hark` binary file in the folder in which the curl command was run. If you want to install it
 in another location instead, run:
 ```sh
 curl -sSL https://raw.githubusercontent.com/HEASARC/hark/gh/install.sh | sh -s -- --install-dir /my/custom/location/bin
@@ -34,16 +34,17 @@ Commands
       -----------
             help: Show help message (also: h, ?).
                   Use help command-name for command help
+           about: About hark!
             exit: Exit (also: quit, q)
 ```
 
-`hard` current has four main commands:
+`hark` currently has four main commands:
 
 - `list-tables` to list the tables supported by the applications.
-- `list-columns {table_name}` to list the names and descriptions of the columns in a given table.
-- `query-table`: Query a specific table using a circular search region centered at some RA,DEC position,
+- `list-columns ...` to list the names and descriptions of the columns in a given table.
+- `query-table ...`: Query a specific table using a circular search region centered at some RA,DEC position,
     with some radius.
-- `aws-download`: Download the data from the AWS. The passed URI is what you get when calling `query-tables`
+- `aws-download ...`: Download the data from the AWS. The passed URI is what you get when calling `query-tables`
     and requesting the data products.
 
 # Examples
@@ -86,6 +87,3 @@ hark <<EOF > output.txt
 query-table nicermastr 182.6,39.4
 EOF
 ```
-
-# Author
-Abdu Zoghbi For the HEASARC

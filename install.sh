@@ -23,7 +23,7 @@
 GITHUB_OWNER="HEASARC" # <<< REPLACE THIS with your GitHub username or organization
 GITHUB_REPO="hark"
 PROJECT_NAME="hark"
-DEFAULT_INSTALL_DIR="${HOME}/.local/bin/"
+DEFAULT_INSTALL_DIR="${PWD}"
 
 # --- Helper Functions ---
 echo_err() {
