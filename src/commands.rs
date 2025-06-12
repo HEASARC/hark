@@ -30,6 +30,7 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{:>17}", "-----------".cyan().dimmed());
         println!("{:>16}: Show help message (also: h, ?).\n{:>18}Use {} for command help",
                         "help".cyan(), "", "help command-name".cyan());
+        println!("{:>16}: About hark!", "about".cyan());
         println!("{:>16}: Exit (also: quit, q)", "exit".cyan());
         println!();
     } else if args[0] == "list-tables" {
@@ -119,6 +120,18 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
     } else {
         println!("No Help for command '{}'", args[0]);
     }
+    Ok(())
+}
+
+pub fn handle_about() -> Result<()> {
+    println!();
+    println!("{}: HEASARC archive offline explorer.", "hark".bold().yellow());
+    println!();
+    println!("{}", "Developed by Abdu Zoghbi for the HEASARC".dimmed());
+    println!("{}", "Copyright (c) 2025 University of Maryland. All rights reserved.".dimmed());
+    println!("{}", "See LICENSE file at https://github.com/HEASARC/hark".dimmed());
+    println!("{}", "The material is based upon work supported by NASA under award number 80GSFC24M0006".dimmed());
+    println!();
     Ok(())
 }
 
@@ -549,12 +562,10 @@ pub fn query_table(table: &str, position: &str, radius: &f64, columns_specifier:
         println!("Query returned {} entries", found_count.to_string().green().bold());
         println!("{}", "---------------------------".dimmed());
         if !last_prod.contains("No Product Link") && !last_prod.is_empty() { // Check if a valid product link was generated
-            println!("To retrieve a product, use aws command line interface ({}).\nFor example:\n{} {} {}{} {}",
-                "https://aws.amazon.com/cli/".dimmed(),
-                "aws s3 --no-sign-request cp ".green(), // Corrected --no-sign to --no-sign-request
-                last_prod.bold(),
-                "./".green(), last_prod.split('/').last().unwrap_or("").green(),
-                "--recursive".to_string().green() // Corrected --recursive. to --recursive
+            println!("To retrieve a product, use the {} command. For example:\n{} {}",
+                "aws-download".yellow(),
+                "aws-download".green(),
+                last_prod
             );
         }
     }

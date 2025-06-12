@@ -53,9 +53,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 3. Open a connection to the temporary database
     let conn = Connection::open(temp_db_path)?;
     println!("{} Archive Interactive Browser", "HEASARC".bold().cyan());
-    println!("{}", "Copyright (c) 2025 University of Maryland. All rights reserved.".dimmed());
-    println!("{}", "See LICENSE file at https://github.com/HEASARC/hark".dimmed());
-    println!("{}", "The material is based upon work supported by NASA under award number 80GSFC24M0006".dimmed());
     println!();
     println!("Type {} for help, or {} to quit.", "?/help".cyan(), "exit/quit".cyan());
     println!("{}", "------------------------------------------------------".dimmed());
