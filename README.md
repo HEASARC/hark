@@ -1,4 +1,4 @@
-# HEASARC offline databse browser
+# HEASARC offline database browser
 `hark` is a command line tool that allows you to search part of the HEASARC archival database and download the data.
 
 Tables from active missions are included in the package. It therefore does not need to connect to the HEASARC servers.
