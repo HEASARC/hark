@@ -31,6 +31,10 @@ pub async fn parse_and_dispatch_command(line: &str, conn: &Connection) -> Result
             commands::handle_about()?;
             Ok(CommandOutcome::Continue)
         }
+        "self-update" => {
+            commands::handle_self_update().await?;
+            Ok(CommandOutcome::Continue)
+        }
         "list-tables" => {
             commands::list_tables(&args, conn)?;
             Ok(CommandOutcome::Continue)

@@ -12,6 +12,8 @@ use aws_config;
 use aws_sdk_s3::{Client as S3Client};
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
+
+use self_update::{self, cargo_crate_version};
  
 use crate::SUPPORTED_TABLES;
 
@@ -30,9 +32,15 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
         println!("{:>17}", "-----------".cyan().dimmed());
         println!("{:>16}: Show help message (also: h, ?).\n{:>18}Use {} for command help",
                         "help".cyan(), "", "help command-name".cyan());
+        println!("{:>16}: Update hark to the latest version!", "self-update".cyan());
         println!("{:>16}: About hark!", "about".cyan());
         println!("{:>16}: Exit (also: quit, q)", "exit".cyan());
         println!();
+    } else if args[0] == "self-update" {
+        println!("{}", "self-update:".green().bold());
+        println!("{:>17}", "-------------------".cyan().dimmed());
+        println!("Update hark to get the most recent feasures and table updates.");
+
     } else if args[0] == "list-tables" {
         println!("{}", "list-tables:".green().bold());
         println!("{:>17}", "-------------------".cyan().dimmed());
@@ -40,6 +48,7 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
     } else if args[0] == "list-columns" {
 
         println!();
+        println!("List the columns of the given table.");
         println!(
             "{}: {} {} [{}]",
             "Usage".yellow().underline(), "list-columns".bold(), "table_name".cyan(), "all".yellow().dimmed());
@@ -55,25 +64,11 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
                 "list-columns nicermastr".cyan());
         println!("  - List all columns for the SWIFT master catalog:\n    {}\n",
                 "list-columns swiftmastr all".cyan());
-    
-    } else if args[0] == "aws-download" {
-
-        println!();
-        println!(
-            "{}: {} {}",
-            "Usage".yellow().underline(), "aws-download".bold(), "s3_uri".cyan());
-        println!();
-        println!("{:>12}: The s3 URI return in query-table.",
-                "s3_uri".cyan());
-        println!();
-
-        println!("{}", "Examples:".yellow().underline());
-        println!("  - Download SWIFT obsid 000037258040:\n     {}\n",
-                "aws-download s3://nasa-heasarc/swift/data/obs/2015_12/00037258040".cyan());
 
     } else if args[0] == "query-table" {
 
         println!();
+        println!("Query a given table around an RA,DEC position and get related data products.");
         println!(
             "{}: {} {} [{}] [{}] [{}]",
             "Usage".yellow().underline(), "query-table".bold(), "table_name position".cyan(), 
@@ -109,14 +104,21 @@ pub fn handle_help(args: &[String], _conn: &Connection) -> Result<()> {
                 "query-table xmmmaster 182.6,39.4 products".cyan());
     
     } else if args[0] == "aws-download" {
+
         println!();
+        println!("Download data from the AWS cloud.");
         println!(
             "{}: {} {}",
-            "Usage".yellow().underline(), "aws-download".bold(), "s3_uri".cyan(),
-        );
+            "Usage".yellow().underline(), "aws-download".bold(), "s3_uri".cyan());
         println!();
-        println!("{:>12}: The uri found in query-table, of the form: s3://nasa-heasarc/...",
+        println!("{:>12}: The s3 URI return in query-table.",
                 "s3_uri".cyan());
+        println!();
+
+        println!("{}", "Examples:".yellow().underline());
+        println!("  - Download SWIFT obsid 000037258040:\n     {}\n",
+                "aws-download s3://nasa-heasarc/swift/data/obs/2015_12/00037258040".cyan());
+
     } else {
         println!("No Help for command '{}'", args[0]);
     }
@@ -132,6 +134,40 @@ pub fn handle_about() -> Result<()> {
     println!("{}", "See LICENSE file at https://github.com/HEASARC/hark".dimmed());
     println!("{}", "The material is based upon work supported by NASA under award number 80GSFC24M0006".dimmed());
     println!();
+    Ok(())
+}
+
+/// Handles the self-update command, checking for and applying new releases.
+pub async fn handle_self_update() -> Result<()> {
+    println!("{}", "Checking for updates...".yellow());
+    let current_version = cargo_crate_version!();
+
+    let status = tokio::task::spawn_blocking(|| {
+        self_update::backends::github::Update::configure()
+            .repo_owner("heasarc")
+            .repo_name("hark")   
+            .bin_name("hark")      
+            .show_download_progress(true)
+            .target(&get_target())
+            .current_version(current_version) 
+            .build().context("Failed to build self-update configuration")?
+            .update().context("Self-update operation failed")
+    })
+    .await
+    .context("Failed to join blocking task for self-update")??; // Two '?' because of nested Result
+
+    println!();
+
+    match status {
+        self_update::Status::UpToDate(current_version) => {
+            println!("{} {}!", "hark is already up to date, verion: ".green(), current_version.green().bold())
+        },
+        self_update::Status::Updated(v) => {
+            println!("{} {}!\n {}", 
+            "Successfully updated hark to version:".green(), v.green().bold(),
+            "you may need to restart hark to pick up the updates".green());
+        }
+    }
     Ok(())
 }
 
@@ -692,4 +728,23 @@ fn get_default_radius(conn: &Connection, table_name: &str) -> Result<f64, Box<dy
     let radius = radius_str.parse::<f64>()?;
 
     Ok(radius)
+}
+
+/// Returns a normalized target string for the current platform
+fn get_target() -> &'static str {
+    let system_target = self_update::get_target();
+    
+    match system_target {
+        // Linux x86_64
+        target if target.contains("x86_64") && target.contains("linux") => "linux-amd64",
+        // macOS x86_64 (Intel)
+        target if target.contains("x86_64") && target.contains("apple") => "macos-amd64",
+        // macOS aarch64 (Apple Silicon)
+        target if target.contains("aarch64") && target.contains("apple") => "macos-arm64",
+        // Default fallback - you might want to handle this differently
+        _ => {
+            eprintln!("Warning: Unsupported target '{}', defaulting to linux-amd64", system_target);
+            "linux-amd64"
+        }
+    }
 }
