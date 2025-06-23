@@ -34,6 +34,7 @@ Commands
       -----------
             help: Show help message (also: h, ?).
                   Use help command-name for command help
+     self-update: Update hark to the latest version!
            about: About hark!
             exit: Exit (also: quit, q)
 ```
@@ -46,6 +47,7 @@ Commands
     with some radius.
 - `aws-download ...`: Download the data from the AWS. The passed URI is what you get when calling `query-tables`
     and requesting the data products.
+- `self-update`: Update `hark` to the latest version to pick up the latest features and the most recent table updates.
 
 # Examples
 ## list-columns
@@ -87,3 +89,8 @@ hark <<EOF > output.txt
 query-table nicermastr 182.6,39.4
 EOF
 ```
+
+- Why do I not see the most recent observations when I search in `hark`.
+The observation tables are updated continuously as observations are taken.
+Run the `self-update` command inside `hark` to check for and install the most
+recent features and table updates.
