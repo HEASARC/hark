@@ -39,7 +39,7 @@ jobs:
       - name: Install musl-tools (Linux only)
         if: matrix.target_os == 'linux' && contains(matrix.target, 'musl')
         run: |
-          sudo apt-get update -y && sudo apt-get install -y musl-tools libssl-dev
+          sudo apt-get update -y && sudo apt-get install -y musl-tools musl-dev libssl-dev pkg-config
 
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -55,6 +55,10 @@ jobs:
           ls -lh target/${{ matrix.target }}/release/${{ matrix.bin_name }}
         env:
           CARGO_TERM_COLOR: always # Ensure colored output in logs
+          # Environment variables for musl builds
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          OPENSSL_STATIC: 1
+          OPENSSL_DIR: /usr/include/openssl
 
       - name: Prepare asset details
         id: asset_prep
