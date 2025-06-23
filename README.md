@@ -90,7 +90,7 @@ query-table nicermastr 182.6,39.4
 EOF
 ```
 
-- Why do I not see the most recent observations when I search in `hark`.
+- Why do I not see the most recent observations when I search in `hark`?
 The observation tables are updated continuously as observations are taken.
 Run the `self-update` command inside `hark` to check for and install the most
 recent features and table updates.
