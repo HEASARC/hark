@@ -1,6 +1,6 @@
 [package]
 name = "hark"
-version = "0.1.260615"
+version = "0.1.260622"
 edition = "2024"
 
 [dependencies]
